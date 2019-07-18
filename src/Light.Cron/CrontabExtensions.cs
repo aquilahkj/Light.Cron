@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.Extensions.DependencyInjection
 {
-    public static class TimedJobExtensions
+    public static class CrontabExtensions
     {
         public static IServiceCollection AddCrontabJob(this IServiceCollection services, Action<CrontabOptionsBuilder> options = null)
         {
@@ -21,7 +21,7 @@ namespace Microsoft.Extensions.DependencyInjection
 
 namespace Microsoft.AspNetCore.Builder
 {
-    public static class TimedJobExtensions
+    public static class CrontabExtensions
     {
         public static IApplicationBuilder UseCrontabJob(this IApplicationBuilder self)
         {
