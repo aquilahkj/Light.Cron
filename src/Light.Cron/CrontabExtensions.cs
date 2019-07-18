@@ -9,9 +9,12 @@ namespace Microsoft.Extensions.DependencyInjection
 {
     public static class TimedJobExtensions
     {
-        public static IServiceCollection AddCrontabJob(this IServiceCollection self)
+        public static IServiceCollection AddCrontabJob(this IServiceCollection services, Action<CrontabOptionsBuilder> options = null)
         {
-            return self.AddSingleton<CrontabService>();
+            var builder = new CrontabOptionsBuilder();
+            options?.Invoke(builder);
+            builder.BuildServices(services);
+            return services;
         }
     }
 }

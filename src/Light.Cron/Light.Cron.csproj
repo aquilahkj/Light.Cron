@@ -2,6 +2,21 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <Version>0.2.0</Version>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Description>The light weight crontab</Description>
+    <Title>Light.Cron</Title>
+    <Authors>Aquila Huang</Authors>
+    <Copyright>Copyright © 2017</Copyright>
+    <PackageLicenseUrl>https://github.com/aquilahkj/Light.Cron/blob/master/LICENSE</PackageLicenseUrl>
+    <Owners>Aquila Huang</Owners>
+    <PackageProjectUrl>https://github.com/aquilahkj/Light.Cron</PackageProjectUrl>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <PackageTags>C#, Crontab</PackageTags>
+    <AssemblyOriginatorKeyFile>LightCron.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>true</SignAssembly>
+    <PackOnBuild>true</PackOnBuild>
   </PropertyGroup>
 
   <ItemGroup>

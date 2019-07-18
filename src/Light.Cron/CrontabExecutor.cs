@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -8,37 +9,67 @@ namespace Light.Cron
 {
     class CrontabExecutor
     {
-        public CrontabExecutor(TypeInfo typeInfo, MethodInfo method, CrontabSchedule[] schedule, bool skipWhileExecuting, bool runImmediately)
+        readonly IServiceProvider services;
+
+        public CrontabExecutor(string name, IServiceProvider services, TypeInfo typeInfo, MethodInfo method, CrontabSchedule[] schedule, bool allowConcurrentExecution, bool runImmediately)
         {
+            this.services = services;
+            Name = name;
             Method = method;
             Type = typeInfo;
-            Identifier = Type.FullName + '.' + method.Name;
             Schedule = schedule;
-            //HardCode = hardCode;
-            SkipWhileExecuting = skipWhileExecuting;
+            AllowConcurrentExecution = allowConcurrentExecution;
             RunImmediately = runImmediately;
-            Status = false;
-            Enable = true;
+            //Enable = true;
         }
 
+        int flag;
 
-        public string Identifier { get; private set; }
+        public string Name { get; }
 
-        public TypeInfo Type { get; private set; }
+        public TypeInfo Type { get; }
 
-        public MethodInfo Method { get; private set; }
+        public MethodInfo Method { get; }
 
-        public CrontabSchedule[] Schedule { get; private set; }
+        public CrontabSchedule[] Schedule { get; }
 
-        public bool SkipWhileExecuting { get; set; }
+        public bool AllowConcurrentExecution { get; }
 
-        public bool RunImmediately { get; set; }
+        public bool RunImmediately { get; }
 
-        public bool Status { get; private set; }
+        public bool Running
+        {
+            get {
+                return flag > 0;
+            }
+        }
 
-        //public bool HardCode { get; private set; }
+        bool status = false;
 
-        public bool Enable { get; set; }
+        public bool Enable()
+        {
+            if (!status || flag > 0) {
+                status = true;
+                if (RunImmediately) {
+                    RunExecute();
+                }
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+
+        public bool Disable()
+        {
+            if (status) {
+                status = false;
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
 
         private bool Check(DateTime dateTime)
         {
@@ -50,20 +81,9 @@ namespace Light.Cron
             return false;
         }
 
-        public bool Run(IServiceProvider services, DateTime dateTime, bool immediately)
+        private void RunExecute()
         {
-            if (SkipWhileExecuting && Status) {
-                return false;
-            }
-            if (!Enable) {
-                return false;
-            }
-
-            if (!Check(dateTime)) {
-                if (!(immediately && RunImmediately))
-                    return false;
-            }
-            Status = true;
+            Interlocked.Increment(ref flag);
             var serviceScope = services.CreateScope();
             var logger = services.GetService<ILogger>();
             try {
@@ -83,8 +103,26 @@ namespace Light.Cron
             }
             finally {
                 serviceScope.Dispose();
-                Status = false;
+                Interlocked.Decrement(ref flag);
             }
+        }
+
+
+        public bool Run()
+        {
+            if (!status) {
+                return false;
+            }
+            var dateTime = DateTime.Now;
+            if (!Check(dateTime)) {
+                return false;
+            }
+
+            if (!AllowConcurrentExecution && flag > 0) {
+                return false;
+            }
+
+            RunExecute();
             return true;
         }
     }

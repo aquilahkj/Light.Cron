@@ -5,76 +5,49 @@ using System.Text.RegularExpressions;
 
 namespace Light.Cron
 {
-    class TimeCrontabValue : BasicContabValue
+    class TimeCrontabValue : CrontabValue
     {
-        static readonly Regex regex = new Regex(@"^(?<fromHour>[0-1]?[0-9]|2[0-3]):(?<fromMinute>[0-5]?[0-9])-(?<toHour>[0-1]?[0-9]|2[0-3]):(?<toMinute>[0-5]?[0-9])$", RegexOptions.Compiled);
+        static readonly Regex regex = new Regex("^(?<fromHour>[0-1]?[0-9]|2[0-3]):(?<fromMinute>[0-5]?[0-9])-(?<toHour>[0-1]?[0-9]|2[0-3]):(?<toMinute>[0-5]?[0-9])(/(?<interval>\\d+))?$", RegexOptions.Compiled);
 
-        static readonly char[] separator = { ';' };
+        static readonly char[] separator = { ',' };
 
         class TimeRange
         {
-            readonly int fromHour;
-            readonly int fromMinute;
-            readonly int toHour;
-            readonly int toMinute;
+            readonly int fromTotalMinute;
+            readonly int toTotalMinute;
             readonly int interval;
-            readonly HashSet<string> hash = new HashSet<string>();
 
             public TimeRange(int fromHour, int fromMinute, int toHour, int toMinute, int interval)
             {
-                this.fromHour = fromHour;
-                this.fromMinute = fromMinute;
-                this.toHour = toHour;
-                this.toMinute = toMinute;
+                this.fromTotalMinute = fromHour * 60 + fromMinute;
+                this.toTotalMinute = toHour * 60 + toMinute;
                 this.interval = interval;
-
-                if (interval > 1) {
-                    var time = DateTime.Now;
-                    var date = time.Date;
-                    var from = date.AddHours(fromHour).AddMinutes(fromMinute);
-                    var to = date.AddHours(toHour).AddMinutes(toMinute);
-
-                    while (from <= to) {
-                        from.AddMinutes(interval);
-                        hash.Add(from.ToString("HHmm"));
-                    }
-
-                }
             }
+
+            const int MAX_MINUTE = 23 * 60 + 59;
+
 
             public bool CheckTimeRange(DateTime time)
             {
-                if (interval == 1) {
-                    var hour = time.Hour;
-                    var min = time.Minute;
-                    if (hour == fromHour) {
-                        if (fromHour == toHour) {
-                            return min >= fromMinute && min <= toMinute;
-                        }
-                        else {
-                            return min >= fromMinute;
-                        }
-                    }
-                    else if (hour == toHour) {
-                        return min <= toMinute;
-                    }
-                    else {
-                        return hour > fromHour && hour < toHour;
-                    }
+                var minute = time.Hour * 60 + time.Minute;
+                if (fromTotalMinute <= toTotalMinute) {
+                    return minute >= fromTotalMinute && minute <= toTotalMinute && (minute - fromTotalMinute) % interval == 0;
                 }
                 else {
-                    return hash.Contains(time.ToString("HHmm"));
-                }
-            }
-        }
+                    if (minute >= toTotalMinute && minute <= MAX_MINUTE && (minute - toTotalMinute) % interval == 0) {
+                        return true;
+                    }
 
-        public static TimeCrontabValue Parse(string value)
-        {
-            if (TryParse(value, out TimeCrontabValue timeRange)) {
-                return timeRange;
-            }
-            else {
-                throw new ArgumentException($"{nameof(value)} format error");
+                    var fromMinute1 = toTotalMinute;
+                    var toMinute1 = fromTotalMinute + MAX_MINUTE + 1;
+                    var minute1 = minute + MAX_MINUTE + 1;
+                    if (minute1 >= fromMinute1 && minute1 <= toMinute1 && (minute1 - fromMinute1) % interval == 0) {
+                        return true;
+                    }
+                    else {
+                        return false;
+                    }
+                }
             }
         }
 
@@ -84,37 +57,11 @@ namespace Light.Cron
             if (string.IsNullOrEmpty(value)) {
                 return false;
             }
-            int index = value.IndexOf('/');
-            string range;
-            int interval = 1;
-            if (index > -1) {
-                if (index > 0 && index < value.Length - 1) {
-                    var first = value.Substring(0, index);
-                    var second = value.Substring(index + 1);
-                    if (int.TryParse(second, out int i)) {
-                        range = first;
-                        if (i <= 0) {
-                            return false;
-                        }
-                        else {
-                            interval = i;
-                        }
-                    }
-                    else {
-                        return false;
-                    }
-                }
-                else {
-                    return false;
-                }
-            }
-            else {
-                range = value;
-            }
-            string[] rangearr = range.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+            string[] rangearr = value.Split(separator, StringSplitOptions.RemoveEmptyEntries);
             if (rangearr.Length == 0) {
                 return false;
             }
+
             List<TimeRange> list = new List<TimeRange>();
             foreach (var item in rangearr) {
                 var match = regex.Match(item);
@@ -123,12 +70,9 @@ namespace Light.Cron
                     var fromMinute = Convert.ToInt32(match.Groups["fromMinute"].Value);
                     var toHour = Convert.ToInt32(match.Groups["toHour"].Value);
                     var toMinute = Convert.ToInt32(match.Groups["toMinute"].Value);
-
-                    if (fromHour > toHour) {
-                        return false;
-                    }
-                    else if (fromHour == toHour && fromMinute > toMinute) {
-                        return false;
+                    var interval = 1;
+                    if (match.Groups["interval"].Success) {
+                        interval = Convert.ToInt32(match.Groups["interval"].Value);
                     }
                     var timerange = new TimeRange(fromHour, fromMinute, toHour, toMinute, interval);
                     list.Add(timerange);
@@ -138,23 +82,16 @@ namespace Light.Cron
                 }
             }
 
-            timeRange = new TimeCrontabValue(list, interval);
+            timeRange = new TimeCrontabValue(list);
             return true;
         }
 
-        TimeCrontabValue(List<TimeRange> list, int interval)
+        TimeCrontabValue(List<TimeRange> list)
         {
             this.rangeList = list;
-            this.interval = interval;
-        }
-
-        public TimeCrontabValue()
-        {
         }
 
         readonly List<TimeRange> rangeList;
-
-        readonly int interval;
 
         public override bool Check(DateTime time)
         {

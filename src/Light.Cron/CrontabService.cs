@@ -12,154 +12,29 @@ namespace Light.Cron
 {
     public class CrontabService : IDisposable
     {
-        readonly IServiceProvider services;
-
         readonly ILogger logger;
 
-        readonly Dictionary<string, CrontabExecutor> executorDict;
+        readonly Dictionary<string, CrontabExecutor> executorDict = new Dictionary<string, CrontabExecutor>();
 
         readonly CancellationTokenSource cts = new CancellationTokenSource();
 
-
-        public CrontabService(IServiceProvider services)
+        public CrontabService(IServiceProvider services, CrontabOptions options)
         {
             if (services == null) {
                 throw new ArgumentNullException(nameof(services));
             }
-            this.services = services;
-            this.logger = services.GetService<ILogger>();
-            executorDict = new Dictionary<string, CrontabExecutor>();
-            var list = CreateCrontabSettings();
-            foreach (var item in list) {
-                executorDict.Add(item.Identifier, item);
-            }
-
-            var dt = DateTime.Now;
-            dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
-            var next = dt.AddMinutes(1);
-            var due = Convert.ToInt32(Math.Ceiling((next - DateTime.Now).TotalMilliseconds));
-
-            List<CrontabExecutor> enablelist;
-            lock (executorDict) {
-                enablelist = executorDict.Values.ToList();
-            }
-            foreach (var item in enablelist) {
-                Task.Factory.StartNew(() => {
-                    item.Run(services, dt, true);
-                });
-            }
-
-            Task.Factory.StartNew(async () => {
-                try {
-                    await Task.Delay(due, cts.Token);
-                    Execute();
-                }
-                catch (Exception ex) {
-                    if (logger != null)
-                        logger.LogError(ex, "Execute error");
-                }
-            }, cts.Token);
-
-
-        }
-
-        private void Execute()
-        {
-            var dt = DateTime.Now;
-            dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
-            var next = dt.AddMinutes(1);
-            var due = Convert.ToInt32(Math.Ceiling((next - DateTime.Now).TotalMilliseconds));
-            Task.Factory.StartNew(async () => {
-                try {
-                    await Task.Delay(due, cts.Token);
-                    Execute();
-                }
-                catch (Exception ex) {
-                    if (logger != null)
-                        logger.LogError(ex, "Execute error");
-                }
-            }, cts.Token);
-
-            List<CrontabExecutor> enablelist;
-            lock (executorDict) {
-                enablelist = executorDict.Values.ToList();
-            }
-            foreach (var item in enablelist) {
-                Task.Factory.StartNew(() => {
-                    item.Run(services, dt, false);
-                });
-            }
-        }
-
-        //public void SetCrontab(string name, string scheduleValue, bool skipWhileExecuting, bool runImmediately)
-        //{
-        //    var typeName = name.Substring(0, name.LastIndexOf('.'));
-        //    var methodName = name.Substring(name.LastIndexOf('.') + 1);
-        //    var type = Type.GetType(typeName, true).GetTypeInfo();
-        //    var method = type.GetMethod(methodName);
-
-
-        //    if (!CrontabSchedule.TryParse(scheduleValue, out CrontabSchedule schedule)) {
-        //        throw new CustomAttributeFormatException("Crontab Schedule Format Error");
-        //    }
-        //    var item = new CrontabExecutor(type, method, schedule, skipWhileExecuting, runImmediately, false);
-        //    lock (executorDict) {
-        //        executorDict[item.Identifier] = item;
-        //    }
-        //}
-
-        public void Disable(string name)
-        {
-            //lock (executorDict) {
-            if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
-                executor.Enable = false;
-            }
-            else {
-                throw new ArgumentException($"Method Name {name} dose not exists");
-            }
-            //}
-        }
-
-        public void Enable(string name)
-        {
-            //lock (executorDict) {
-            if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
-                executor.Enable = true;
-            }
-            else {
-                throw new ArgumentException($"Method Name {name} dose not exists");
-            }
-            //}
-        }
-
-        private List<CrontabExecutor> CreateCrontabSettings()
-        {
-            var entryAssembly = Assembly.GetEntryAssembly();
-            var dependencyContext = DependencyContext.Load(entryAssembly);
-            IList<Assembly> assemblys;
-            if (dependencyContext == null) {
-                assemblys = new[] { entryAssembly };
-            }
-            else {
-                var assName = Assembly.GetExecutingAssembly().GetName().Name;
-                assemblys = dependencyContext
-                 .RuntimeLibraries
-                 .Where(l => l.Dependencies.Any(d => string.Equals(assName, d.Name, StringComparison.Ordinal)))
-                 .SelectMany(l => l.GetDefaultAssemblyNames(dependencyContext))
-                 .Select(assembly => Assembly.Load(new AssemblyName(assembly.Name)))
-                 .ToArray();
-            }
-            var types = assemblys.SelectMany(a => a.DefinedTypes.Where(y => y.GetCustomAttribute<CrontabJobAttribute>() != null))
-                                 .ToArray();
+            var types = GetTypeInfos(options);
             var list = new List<CrontabExecutor>();
             foreach (var type in types) {
                 foreach (var method in type.DeclaredMethods) {
                     var attribute = method.GetCustomAttribute<CrontabScheduleAttribute>();
                     if (attribute != null) {
-                        var identify = type.FullName + '.' + method.Name;
+                        if (string.IsNullOrEmpty(attribute.Name)) {
+                            throw new CustomAttributeFormatException("Crontab name is empty");
+                        }
                         var arr = attribute.Schedule.Split('|');
                         if (arr.Length == 0) {
-                            throw new CustomAttributeFormatException("Crontab Schedule No Data");
+                            throw new CustomAttributeFormatException($"Crontab '{attribute.Name}' no schedule");
                         }
                         var schedules = new CrontabSchedule[arr.Length];
                         for (int i = 0; i < arr.Length; i++) {
@@ -167,18 +42,120 @@ namespace Light.Cron
                                 schedules[i] = schedule;
                             }
                             else {
-                                throw new CustomAttributeFormatException("Crontab Schedule Format Error");
+                                throw new CustomAttributeFormatException($"Crontab schedule '{arr[i]}' format error");
                             }
                         }
-                        var item = new CrontabExecutor(type, method, schedules, attribute.SkipWhileExecuting, attribute.RunImmediately);
-                        item.SkipWhileExecuting = attribute.SkipWhileExecuting;
-                        item.RunImmediately = attribute.RunImmediately;
-                        list.Add(item);
+                        var item = new CrontabExecutor(attribute.Name, services, type, method, schedules, attribute.AllowConcurrentExecution, attribute.RunImmediately);
+                        if (!executorDict.ContainsKey(item.Name)) {
+                            executorDict.Add(item.Name, item);
+                            if (attribute.AutoEnable) {
+                                item.Enable();
+                            }
+                        }
+                        else {
+                            throw new CustomAttributeFormatException($"Crontab '{item.Name}' name is duplicate");
+                        }
                     }
                 }
             }
-            return list;
 
+
+            this.logger = services.GetService<ILogger>();
+
+            var dt = DateTime.Now;
+            dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
+            var next = dt.AddMinutes(1);
+            var due = Convert.ToInt32(Math.Ceiling((next - DateTime.Now).TotalMilliseconds));
+
+            Task.Factory.StartNew(async () => {
+                try {
+                    await Task.Delay(due, cts.Token);
+                    Execute();
+                }
+                catch (Exception ex) {
+                    if (logger != null)
+                        logger.LogError(ex, "Execute error");
+                }
+            }, cts.Token);
+        }
+
+        private void Execute()
+        {
+            if (cts.IsCancellationRequested) {
+                return;
+            }
+            var dt = DateTime.Now;
+            dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
+            var next = dt.AddMinutes(1);
+            var due = Convert.ToInt32(Math.Ceiling((next - DateTime.Now).TotalMilliseconds));
+            Task.Factory.StartNew(async () => {
+                try {
+                    await Task.Delay(due, cts.Token);
+                    Execute();
+                }
+                catch (Exception ex) {
+                    if (logger != null)
+                        logger.LogError(ex, "Execute error");
+                }
+            }, cts.Token);
+            var list = executorDict.Values.ToList();
+            foreach (var item in list) {
+                Task.Factory.StartNew(() => {
+                    item.Run();
+                });
+            }
+        }
+
+        public bool Disable(string name)
+        {
+            if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
+                return executor.Disable();
+            }
+            else {
+                throw new ArgumentException($"Method Name {name} dose not exists");
+            }
+        }
+
+        public bool Enable(string name)
+        {
+            if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
+                return executor.Enable();
+            }
+            else {
+                throw new ArgumentException($"Method Name {name} dose not exists");
+            }
+        }
+
+        private List<TypeInfo> GetTypeInfos(CrontabOptions options)
+        {
+            HashSet<Assembly> assemblys = new HashSet<Assembly>();
+            if (options.ScanAllAssembly) {
+                var entryAssembly = Assembly.GetEntryAssembly();
+                var dependencyContext = DependencyContext.Load(entryAssembly);
+                if (dependencyContext == null) {
+                    assemblys.Add(entryAssembly);
+                }
+                else {
+                    var assName = Assembly.GetExecutingAssembly().GetName().Name;
+                    var libs = dependencyContext.RuntimeLibraries.Where(lib => lib.Dependencies.Any(dep => string.Equals(assName, dep.Name, StringComparison.Ordinal)));
+                    var assNames = libs.SelectMany(lib => lib.GetDefaultAssemblyNames(dependencyContext));
+                    foreach (var name in assNames) {
+                        var assembly = Assembly.Load(new AssemblyName(name.Name));
+                        assemblys.Add(assembly);
+                    }
+                }
+            }
+            if (options.Assemblies != null && options.Assemblies.Count > 0) {
+                foreach (var assembly in options.Assemblies) {
+                    assemblys.Add(assembly);
+                }
+            }
+            if (assemblys.Count == 0) {
+                assemblys.Add(Assembly.GetEntryAssembly());
+            }
+
+            var types = assemblys.SelectMany(a => a.DefinedTypes.Where(y => y.GetCustomAttribute<CrontabJobAttribute>() != null)).ToList();
+            return types;
         }
 
         #region IDisposable Support
@@ -188,8 +165,10 @@ namespace Light.Cron
         {
             if (!disposedValue) {
                 if (disposing) {
-                    //this.timer.Dispose();
+                    var list = executorDict.Values.ToList();
+                    list.ForEach(x => x.Disable());
                     cts.Cancel();
+                    cts.Dispose();
                     // TODO: dispose managed state (managed objects).
                 }
 
