@@ -96,5 +96,107 @@ namespace Light.Cron.Test
                 }
             }
         }
+
+        [Fact]
+        public void Test_TimeRange_RE()
+        {
+            var values = new string[] { "17:30-05:30" };
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var hour = date1.Hour;
+                    var minute = date1.Minute;
+
+                    if ((hour > 17 || (hour == 17 && minute >= 30))||
+                       (hour < 5 || (hour == 5 && minute <= 30)))
+                        Assert.True(schedule.Check(date1));
+                    else {
+                        Assert.False(schedule.Check(date1));
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void Test_TimeRange_RE_Week()
+        {
+            var values = new string[] { "17:30-05:30 * * 1-5" };
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var hour = date1.Hour;
+                    var minute = date1.Minute;
+                    var week = (int)date1.DayOfWeek;
+                    if (((hour > 17 || (hour == 17 && minute >= 30)) && week >= 1 && week <= 5) ||
+                       ((hour < 5 || (hour == 5 && minute <= 30)) && week >= 2 && week <= 6)) {
+                        Assert.True(schedule.Check(date1));
+                    }
+                    else {
+                        Assert.False(schedule.Check(date1), date1.ToString());
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void Test_TimeRange_RE_Day()
+        {
+            var values = new string[] { "17:30-05:30 1-5 * *" };
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var hour = date1.Hour;
+                    var minute = date1.Minute;
+                    var day = date1.Day;
+                    if (((hour > 17 || (hour == 17 && minute >= 30)) && day >= 1 && day <= 5) ||
+                       ((hour < 5 || (hour == 5 && minute <= 30)) && day >= 2 && day <= 6)) {
+                        Assert.True(schedule.Check(date1));
+                    }
+                    else {
+                        Assert.False(schedule.Check(date1), date1.ToString());
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void Test_TimeRange_Pre5_RE()
+        {
+            var values = new string[] { "23:30-00:30/7" };
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var list = new List<DateTime>() {
+                        date1.Date.AddHours(23).AddMinutes(30),
+                        date1.Date.AddHours(23).AddMinutes(37),
+                        date1.Date.AddHours(23).AddMinutes(44),
+                        date1.Date.AddHours(23).AddMinutes(51),
+                        date1.Date.AddHours(23).AddMinutes(58),
+                        date1.Date.AddMinutes(5),
+                        date1.Date.AddMinutes(12),
+                        date1.Date.AddMinutes(19),
+                        date1.Date.AddMinutes(26)
+                    };
+
+                    if (list.Contains(date1))
+                        Assert.True(schedule.Check(date1), date1.ToString());
+                    else {
+                        Assert.False(schedule.Check(date1), date1.ToString());
+                    }
+                }
+            }
+        }
     }
 }

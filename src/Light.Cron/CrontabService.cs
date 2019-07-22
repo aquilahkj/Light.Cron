@@ -10,19 +10,30 @@ using Microsoft.Extensions.DependencyModel;
 
 namespace Light.Cron
 {
+    /// <summary>
+    /// The Crontab Service
+    /// </summary>
     public class CrontabService : IDisposable
     {
         readonly ILogger logger;
 
         readonly Dictionary<string, CrontabExecutor> executorDict = new Dictionary<string, CrontabExecutor>();
-
         readonly CancellationTokenSource cts = new CancellationTokenSource();
 
-        public CrontabService(IServiceProvider services, CrontabOptions options)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="services"></param>
+        public CrontabService(IServiceProvider services)
         {
             if (services == null) {
                 throw new ArgumentNullException(nameof(services));
             }
+            var options = services.GetService<CrontabOptions>();
+            if (options == null) {
+                options = new CrontabOptions();
+            }
+            this.logger = services.GetService<ILogger>();
             var types = GetTypeInfos(options);
             var list = new List<CrontabExecutor>();
             foreach (var type in types) {
@@ -34,7 +45,7 @@ namespace Light.Cron
                         }
                         var arr = attribute.Schedule.Split('|');
                         if (arr.Length == 0) {
-                            throw new CustomAttributeFormatException($"Crontab '{attribute.Name}' no schedule");
+                            throw new CustomAttributeFormatException($"Crontab '{attribute.Name}' does not have any schedule");
                         }
                         var schedules = new CrontabSchedule[arr.Length];
                         for (int i = 0; i < arr.Length; i++) {
@@ -42,10 +53,14 @@ namespace Light.Cron
                                 schedules[i] = schedule;
                             }
                             else {
-                                throw new CustomAttributeFormatException($"Crontab schedule '{arr[i]}' format error");
+                                throw new CustomAttributeFormatException($"Crontab '{attribute.Name}' schedule '{arr[i]}' format error");
                             }
                         }
-                        var item = new CrontabExecutor(attribute.Name, services, type, method, schedules, attribute.AllowConcurrentExecution, attribute.RunImmediately);
+                        var name = attribute.Name;
+                        if (string.IsNullOrEmpty(name)) {
+                            name = method.Name;
+                        }
+                        var item = new CrontabExecutor(name, services, cts.Token, type, method, schedules, attribute.AllowConcurrentExecution, attribute.RunImmediately);
                         if (!executorDict.ContainsKey(item.Name)) {
                             executorDict.Add(item.Name, item);
                             if (attribute.AutoEnable) {
@@ -58,9 +73,6 @@ namespace Light.Cron
                     }
                 }
             }
-
-
-            this.logger = services.GetService<ILogger>();
 
             var dt = DateTime.Now;
             dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
@@ -81,8 +93,14 @@ namespace Light.Cron
 
         private void Execute()
         {
-            if (cts.IsCancellationRequested) {
+            if (cts.Token.IsCancellationRequested) {
                 return;
+            }
+            var list = executorDict.Values.ToList();
+            foreach (var item in list) {
+                Task.Factory.StartNew(() => {
+                    item.Run();
+                });
             }
             var dt = DateTime.Now;
             dt = new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0);
@@ -98,31 +116,29 @@ namespace Light.Cron
                         logger.LogError(ex, "Execute error");
                 }
             }, cts.Token);
-            var list = executorDict.Values.ToList();
-            foreach (var item in list) {
-                Task.Factory.StartNew(() => {
-                    item.Run();
-                });
-            }
         }
 
-        public bool Disable(string name)
+        /// <summary>
+        /// Get excutor list
+        /// </summary>
+        /// <returns></returns>
+        public List<CrontabExecutor> GetExecutors()
         {
-            if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
-                return executor.Disable();
-            }
-            else {
-                throw new ArgumentException($"Method Name {name} dose not exists");
-            }
+            return executorDict.Values.ToList();
         }
 
-        public bool Enable(string name)
+        /// <summary>
+        /// Get specified executor
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        public CrontabExecutor GetExecutor(string name)
         {
             if (executorDict.TryGetValue(name, out CrontabExecutor executor)) {
-                return executor.Enable();
+                return executor;
             }
             else {
-                throw new ArgumentException($"Method Name {name} dose not exists");
+                throw new ArgumentException($"Crontab name '{name}' dose not exists");
             }
         }
 
@@ -160,13 +176,14 @@ namespace Light.Cron
 
         #region IDisposable Support
         private bool disposedValue; // To detect redundant calls
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="disposing"></param>
         protected virtual void Dispose(bool disposing)
         {
             if (!disposedValue) {
                 if (disposing) {
-                    var list = executorDict.Values.ToList();
-                    list.ForEach(x => x.Disable());
                     cts.Cancel();
                     cts.Dispose();
                     // TODO: dispose managed state (managed objects).
@@ -186,6 +203,9 @@ namespace Light.Cron
         // }
 
         // This code added to correctly implement the disposable pattern.
+        /// <summary>
+        /// Dispose service and stop all executor
+        /// </summary>
         public void Dispose()
         {
             // Do not change this code. Put cleanup code in Dispose(bool disposing) above.

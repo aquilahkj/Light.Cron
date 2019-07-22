@@ -206,6 +206,27 @@ namespace Light.Cron.Test
         }
 
         [Fact]
+        public void Test_FTRE_Hour()
+        {
+            var values = new string[] { "* 8-2 1-5 * *" };
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var hour = date1.Hour;
+                    var day = date1.Day;
+                    if ((date1.Hour >= 8 && day >= 1 && day <= 5) || (date1.Hour <= 2 && day >= 2 && day <= 6))
+                        Assert.True(schedule.Check(date1));
+                    else {
+                        Assert.False(schedule.Check(date1));
+                    }
+                }
+            }
+        }
+
+        [Fact]
         public void Test_Pre3_FTRE()
         {
             var values = new string[] { "* 13-5/3 * * *" };
@@ -219,6 +240,29 @@ namespace Light.Cron.Test
                     var date1 = date.AddMinutes(i);
                     if ((date1.Hour <= 5 || date1.Hour >= 13) && list.Contains(date1.Hour))
                         Assert.True(schedule.Check(date1), date1.ToString());
+                    else {
+                        Assert.False(schedule.Check(date1));
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void Test_Pre3_FTRE_Hour()
+        {
+            var values = new string[] { "* 13-5/3 1-5 * *" };
+
+            foreach (var value in values) {
+                var result = CrontabSchedule.TryParse(value, out CrontabSchedule schedule);
+                Assert.True(result);
+                var date = DateTime.Now.Date;
+                List<int> list = new List<int>() { 13, 16, 19, 22, 1, 4 };
+                for (int i = 0; i < 100000; i++) {
+                    var date1 = date.AddMinutes(i);
+                    var hour = date1.Hour;
+                    var day = date1.Day;
+                    if (((date1.Hour >= 13 && day >= 1 && day <= 5) || (date1.Hour <= 5 && day >= 2 && day <= 6)) && list.Contains(hour))
+                        Assert.True(schedule.Check(date1));
                     else {
                         Assert.False(schedule.Check(date1));
                     }

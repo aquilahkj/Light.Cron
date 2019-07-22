@@ -4,8 +4,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Light.Cron
-{
-    class TimeCrontabValue : CrontabValue
+{ 
+    class CrontabValueTimeRange
     {
         static readonly Regex regex = new Regex("^(?<fromHour>[0-1]?[0-9]|2[0-3]):(?<fromMinute>[0-5]?[0-9])-(?<toHour>[0-1]?[0-9]|2[0-3]):(?<toMinute>[0-5]?[0-9])(/(?<interval>\\d+))?$", RegexOptions.Compiled);
 
@@ -27,22 +27,20 @@ namespace Light.Cron
             const int MAX_MINUTE = 23 * 60 + 59;
 
 
-            public bool CheckTimeRange(DateTime time)
+            public bool CheckTimeRange(DateTime time, out bool next)
             {
+                next = false;
                 var minute = time.Hour * 60 + time.Minute;
                 if (fromTotalMinute <= toTotalMinute) {
                     return minute >= fromTotalMinute && minute <= toTotalMinute && (minute - fromTotalMinute) % interval == 0;
                 }
                 else {
-                    if (minute >= toTotalMinute && minute <= MAX_MINUTE && (minute - toTotalMinute) % interval == 0) {
-                        return true;
+                    if (minute >= fromTotalMinute && minute <= MAX_MINUTE) {
+                        return (minute - fromTotalMinute) % interval == 0;
                     }
-
-                    var fromMinute1 = toTotalMinute;
-                    var toMinute1 = fromTotalMinute + MAX_MINUTE + 1;
-                    var minute1 = minute + MAX_MINUTE + 1;
-                    if (minute1 >= fromMinute1 && minute1 <= toMinute1 && (minute1 - fromMinute1) % interval == 0) {
-                        return true;
+                    else if (minute <= toTotalMinute) {
+                        next = true;
+                        return (minute + MAX_MINUTE + 1 - fromTotalMinute) % interval == 0;
                     }
                     else {
                         return false;
@@ -51,7 +49,7 @@ namespace Light.Cron
             }
         }
 
-        public static bool TryParse(string value, out TimeCrontabValue timeRange)
+        public static bool TryParse(string value, out CrontabValueTimeRange timeRange)
         {
             timeRange = null;
             if (string.IsNullOrEmpty(value)) {
@@ -82,24 +80,27 @@ namespace Light.Cron
                 }
             }
 
-            timeRange = new TimeCrontabValue(list);
+            timeRange = new CrontabValueTimeRange(list);
             return true;
         }
 
-        TimeCrontabValue(List<TimeRange> list)
+        CrontabValueTimeRange(List<TimeRange> list)
         {
             this.rangeList = list;
         }
 
         readonly List<TimeRange> rangeList;
 
-        public override bool Check(DateTime time)
+        // public override bool AllowNext => false;
+
+        public bool Check(DateTime time, out bool next)
         {
             foreach (var item in rangeList) {
-                if (item.CheckTimeRange(time)) {
+                if (item.CheckTimeRange(time, out next)) {
                     return true;
                 }
             }
+            next = false;
             return false;
         }
     }

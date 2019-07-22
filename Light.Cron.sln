@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{B7F542E0-8
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Light.Cron.Test", "test\Light.Cron.Test\Light.Cron.Test.csproj", "{2F298A3B-3511-4140-9AFA-40B2C3A909A0}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sample", "sample", "{C9A4978E-5FE1-4538-A190-004FE56683F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Light.Cron.Sample", "sample\Light.Cron.Sample\Light.Cron.Sample.csproj", "{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -25,6 +29,10 @@ Global
 		{2F298A3B-3511-4140-9AFA-40B2C3A909A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F298A3B-3511-4140-9AFA-40B2C3A909A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F298A3B-3511-4140-9AFA-40B2C3A909A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -32,6 +40,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{36BCE793-E7DE-45C5-9EED-BAF749AF9EA0} = {7F8C2556-9D04-40F4-B282-6C25FCE76B6E}
 		{2F298A3B-3511-4140-9AFA-40B2C3A909A0} = {B7F542E0-8B32-4CD4-AD01-C302BA44A2FB}
+		{B487B1F7-B68C-419B-8AD1-14F99FE2C9FF} = {C9A4978E-5FE1-4538-A190-004FE56683F0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {96F23179-2974-4701-97EF-190073D52666}

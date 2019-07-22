@@ -7,8 +7,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.Extensions.DependencyInjection
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public static class CrontabExtensions
     {
+        /// <summary>
+        /// Add the CrontabJob service
+        /// </summary>
+        /// <param name="services"></param>
+        /// <param name="options"></param>
+        /// <returns></returns>
         public static IServiceCollection AddCrontabJob(this IServiceCollection services, Action<CrontabOptionsBuilder> options = null)
         {
             var builder = new CrontabOptionsBuilder();
@@ -21,12 +30,20 @@ namespace Microsoft.Extensions.DependencyInjection
 
 namespace Microsoft.AspNetCore.Builder
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public static class CrontabExtensions
     {
-        public static IApplicationBuilder UseCrontabJob(this IApplicationBuilder self)
+        /// <summary>
+        /// Use the CrontabJob
+        /// </summary>
+        /// <param name="builder"></param>
+        /// <returns></returns>
+        public static IApplicationBuilder UseCrontabJob(this IApplicationBuilder builder)
         {
-            self.ApplicationServices.GetRequiredService<CrontabService>();
-            return self;
+            builder.ApplicationServices.GetRequiredService<CrontabService>();
+            return builder;
         }
     }
 }

@@ -4,13 +4,22 @@ using System.Text.RegularExpressions;
 
 namespace Light.Cron
 {
+    /// <summary>
+    /// The Crontab Schedule
+    /// </summary>
     public class CrontabSchedule
     {
         static readonly char[] Separator = { ' ' };
 
-        public static bool TryParse(string value, out CrontabSchedule crontab)
+        /// <summary>
+        /// Try to parse the value for the schedule
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="schedule"></param>
+        /// <returns></returns>
+        public static bool TryParse(string value, out CrontabSchedule schedule)
         {
-            crontab = null;
+            schedule = null;
             if (string.IsNullOrEmpty(value)) {
                 return false;
             }
@@ -18,78 +27,65 @@ namespace Light.Cron
             if (array.Length == 0) {
                 return false;
             }
-            var list = new List<CrontabValue>();
             var v1 = array[0];
-            if (MinuteCrontabValue.TryParse(v1, out MinuteCrontabValue minute)) {
-                list.Add(minute);
+            if (CrontabValueMinute.TryParse(v1, out CrontabValueMinute minute)) {
+                CrontabValueHour hour = null;
+                CrontabValueDay day = null;
+                CrontabValueMonth month = null;
+                CrontabValueWeek week = null;
                 if (array.Length >= 2) {
-                    if (HourCrontabValue.TryParse(array[1], out HourCrontabValue hour)) {
-                        list.Add(hour);
-                    }
-                    else {
+                    if (!CrontabValueHour.TryParse(array[1], out hour)) {
                         return false;
                     }
                 }
                 if (array.Length >= 3) {
-                    if (DayCrontabValue.TryParse(array[2], out DayCrontabValue day)) {
-                        list.Add(day);
-                    }
-                    else {
+                    if (!CrontabValueDay.TryParse(array[2], out day)) {
                         return false;
                     }
                 }
                 if (array.Length >= 4) {
-                    if (MonthCrontabValue.TryParse(array[3], out MonthCrontabValue month)) {
-                        list.Add(month);
-                    }
-                    else {
+                    if (!CrontabValueMonth.TryParse(array[3], out month)) {
                         return false;
                     }
                 }
                 if (array.Length >= 5) {
-                    if (WeekCrontabValue.TryParse(array[4], out WeekCrontabValue week)) {
-                        list.Add(week);
-                    }
-                    else {
+                    if (!CrontabValueWeek.TryParse(array[4], out week)) {
                         return false;
                     }
                 }
                 if (array.Length >= 6) {
                     return false;
                 }
-                crontab = new CrontabSchedule(list, value);
+                var timeGroup = new CrontabValueHourMinuteGroup(minute, hour);
+                var dateGroup = new CrontabValueMonthDayGroup(day, month);
+                schedule = new CrontabSchedule(value, timeGroup, dateGroup, week);
                 return true;
             }
-            else if (TimeCrontabValue.TryParse(v1, out TimeCrontabValue timerange)) {
-                list.Add(timerange);
+            else if (CrontabValueTimeRange.TryParse(v1, out CrontabValueTimeRange timeRange)) {
+                CrontabValueDay day = null;
+                CrontabValueMonth month = null;
+                CrontabValueWeek week = null;
                 if (array.Length >= 2) {
-                    if (DayCrontabValue.TryParse(array[1], out DayCrontabValue day)) {
-                        list.Add(day);
-                    }
-                    else {
+                    if (!CrontabValueDay.TryParse(array[1], out day)) {
                         return false;
                     }
                 }
                 if (array.Length >= 3) {
-                    if (MonthCrontabValue.TryParse(array[2], out MonthCrontabValue month)) {
-                        list.Add(month);
-                    }
-                    else {
+                    if (!CrontabValueMonth.TryParse(array[2], out month)) {
                         return false;
                     }
                 }
                 if (array.Length >= 4) {
-                    if (WeekCrontabValue.TryParse(array[3], out WeekCrontabValue week)) {
-                        list.Add(week);
-                    }
-                    else {
+                    if (!CrontabValueWeek.TryParse(array[3], out week)) {
                         return false;
                     }
                 }
                 if (array.Length >= 5) {
                     return false;
                 }
-                crontab = new CrontabSchedule(list, value);
+                var timeGroup = new CrontabValueTimeRangeGroup(timeRange);
+                var dateGroup = new CrontabValueMonthDayGroup(day, month);
+                schedule = new CrontabSchedule(value, timeGroup, dateGroup, week);
                 return true;
             }
             else {
@@ -97,24 +93,46 @@ namespace Light.Cron
             }
         }
 
-        readonly List<CrontabValue> list;
+       
 
+
+
+        /// <summary>
+        /// The schedule value
+        /// </summary>
         public string Value { get; }
 
-        CrontabSchedule(List<CrontabValue> list, string value)
-        {
-            this.Value = value;
-            this.list = list;
-        }
-
+        /// <summary>
+        /// Check the time in the schedule
+        /// </summary>
+        /// <param name="time"></param>
+        /// <returns></returns>
         public bool Check(DateTime time)
         {
-            foreach (var item in list) {
-                if (!item.Check(time)) {
+            if (!timeGroup.Check(time, out bool next)) {
+                return false;
+            }
+            if (!dateGroup.Check(time, next)) {
+                return false;
+            }
+            if (week != null) {
+                if (!week.Check(time, next)) {
                     return false;
                 }
             }
             return true;
+        }
+
+        private readonly CrontabValueTimeGroup timeGroup;
+        private readonly CrontabValueDateGroup dateGroup;
+        private readonly CrontabValueWeek week;
+
+        CrontabSchedule(string value, CrontabValueTimeGroup timeGroup, CrontabValueDateGroup dateGroup, CrontabValueWeek week)
+        {
+            this.timeGroup = timeGroup;
+            this.dateGroup = dateGroup;
+            this.week = week;
+            this.Value = value;
         }
     }
 }

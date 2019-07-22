@@ -4,54 +4,112 @@ using System.Threading;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Threading.Tasks;
 
 namespace Light.Cron
 {
-    class CrontabExecutor
+    /// <summary>
+    /// The Crontab Executor
+    /// </summary>
+    public class CrontabExecutor
     {
-        readonly IServiceProvider services;
+        private readonly IServiceProvider services;
+        private readonly CancellationToken cancellationToken;
+        private readonly CrontabSchedule[] schedule;
+        private readonly TypeInfo type;
+        private readonly MethodInfo method;
 
-        public CrontabExecutor(string name, IServiceProvider services, TypeInfo typeInfo, MethodInfo method, CrontabSchedule[] schedule, bool allowConcurrentExecution, bool runImmediately)
+        internal CrontabExecutor(string name, IServiceProvider services, CancellationToken cancellationToken, TypeInfo typeInfo, MethodInfo method, CrontabSchedule[] schedule, bool allowConcurrentExecution, bool runImmediately)
         {
             this.services = services;
+            this.cancellationToken = cancellationToken;
             Name = name;
-            Method = method;
-            Type = typeInfo;
-            Schedule = schedule;
+            this.method = method;
+            type = typeInfo;
+            this.schedule = schedule;
             AllowConcurrentExecution = allowConcurrentExecution;
             RunImmediately = runImmediately;
-            //Enable = true;
         }
 
         int flag;
 
+        /// <summary>
+        /// The name of the crontab executor
+        /// </summary>
         public string Name { get; }
 
-        public TypeInfo Type { get; }
+        /// <summary>
+        /// The object type name of the crontab executor
+        /// </summary>
+        public string TypeName
+        {
+            get {
+                return type.FullName;
+            }
+        }
 
-        public MethodInfo Method { get; }
+        /// <summary>
+        /// The method name of the crontab executor
+        /// </summary>
+        public string MethodName
+        {
+            get {
+                return method.Name;
+            }
+        }
 
-        public CrontabSchedule[] Schedule { get; }
-
+        /// <summary>
+        /// Whether or not allow concurrent execution
+        /// </summary>
         public bool AllowConcurrentExecution { get; }
 
+        /// <summary>
+        /// Whether or not the sechedule is set to enabled, it runs immediately, default is false
+        /// </summary>
         public bool RunImmediately { get; }
 
-        public bool Running
+        /// <summary>
+        /// The schedule value
+        /// </summary>
+        public string ScheduleValue
+        {
+            get {
+                return string.Join("|", schedule.Select(x => x.Value));
+            }
+        }
+
+        /// <summary>
+        /// Running state
+        /// </summary>
+        public bool IsRunning
         {
             get {
                 return flag > 0;
             }
         }
 
-        bool status = false;
+        /// <summary>
+        /// Enable state
+        /// </summary>
+        public bool IsEnable
+        {
+            get {
+                return status && !cancellationToken.IsCancellationRequested;
+            }
+        }
 
+        bool status;
+
+        /// <summary>
+        /// Enable the executor
+        /// </summary>
+        /// <returns></returns>
         public bool Enable()
         {
             if (!status || flag > 0) {
                 status = true;
                 if (RunImmediately) {
-                    RunExecute();
+                    Task.Factory.StartNew(RunExecute, cancellationToken);
                 }
                 return true;
             }
@@ -60,6 +118,10 @@ namespace Light.Cron
             }
         }
 
+        /// <summary>
+        /// Diable the executor
+        /// </summary>
+        /// <returns></returns>
         public bool Disable()
         {
             if (status) {
@@ -73,7 +135,7 @@ namespace Light.Cron
 
         private bool Check(DateTime dateTime)
         {
-            foreach (var s in Schedule) {
+            foreach (var s in schedule) {
                 if (s.Check(dateTime)) {
                     return true;
                 }
@@ -83,19 +145,36 @@ namespace Light.Cron
 
         private void RunExecute()
         {
+            if (cancellationToken.IsCancellationRequested) {
+                return;
+            }
             Interlocked.Increment(ref flag);
             var serviceScope = services.CreateScope();
             var logger = services.GetService<ILogger>();
             try {
-                var argtypes = Type.GetConstructors()
+                var argtypes = type.GetConstructors()
                     .First()
                     .GetParameters()
                     .Select(x => serviceScope.ServiceProvider.GetService(x.ParameterType))
                     .ToArray();
-                var instance = Activator.CreateInstance(Type.AsType(), argtypes);
+                var instance = Activator.CreateInstance(type.AsType(), argtypes);
 
-                var paramtypes = Method.GetParameters().Select(x => serviceScope.ServiceProvider.GetService(x.ParameterType)).ToArray();
-                Method.Invoke(instance, paramtypes);
+
+                var infos = method.GetParameters();
+                var paramtypes = new object[infos.Length];
+                for (int i = 0; i < infos.Length; i++) {
+                    var info = infos[i];
+                    if (info.ParameterType == typeof(CancellationToken)) {
+                        paramtypes[i] = cancellationToken;
+                    }
+                    else {
+                        paramtypes[i] = serviceScope.ServiceProvider.GetService(info.ParameterType);
+                    }
+                }
+                var result = method.Invoke(instance, paramtypes);
+                if (result is Task task) {
+                    task.Wait();
+                }
             }
             catch (Exception ex) {
                 if (logger != null)
@@ -107,7 +186,10 @@ namespace Light.Cron
             }
         }
 
-
+        /// <summary>
+        /// Run the executor
+        /// </summary>
+        /// <returns></returns>
         public bool Run()
         {
             if (!status) {

@@ -5,10 +5,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Light.Cron
 {
+    /// <summary>
+    /// The crontab options builder
+    /// </summary>
     public class CrontabOptionsBuilder
     {
         readonly List<Assembly> assemblies = new List<Assembly>();
 
+        /// <summary>
+        /// Set specific assembly to scan crontab object
+        /// </summary>
+        /// <param name="assembly"></param>
         public void SetAssembly(Assembly assembly)
         {
             if (!assemblies.Contains(assembly)) {
@@ -16,6 +23,10 @@ namespace Light.Cron
             }
         }
 
+        /// <summary>
+        /// Set specific assembly to scan crontab object
+        /// </summary>
+        /// <param name="assemblyString"></param>
         public void SetAssembly(string assemblyString)
         {
             var assembly = Assembly.Load(assemblyString);
@@ -24,6 +35,9 @@ namespace Light.Cron
             }
         }
 
+        /// <summary>
+        /// Scan all assembly
+        /// </summary>
         public bool ScanAllAssembly
         {
             get;

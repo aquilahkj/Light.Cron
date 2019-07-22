@@ -6,9 +6,8 @@ namespace Light.Cron
 {
     abstract class CrontabValueNode
     {
-        public abstract bool Check(int value);
+        public abstract bool Check(int value, out bool next);
     }
-
 
     class SingleCrontabValueNode : CrontabValueNode
     {
@@ -19,8 +18,9 @@ namespace Light.Cron
             this.value = value;
         }
 
-        public override bool Check(int value)
+        public override bool Check(int value, out bool next)
         {
+            next = false;
             return this.value == value;
         }
     }
@@ -42,17 +42,19 @@ namespace Light.Cron
             this.interval = interval;
         }
 
-        public override bool Check(int value)
+        public override bool Check(int value, out bool next)
         {
+            next = false;
             if (start < end) {
                 return value >= start && value <= end && (value - start) % interval == 0;
             }
             else if (start > end) {
-                if (value >= start && value <= max && (value - start) % interval == 0) {
-                    return true;
+                if (value >= start && value <= max) {
+                    return (value - start) % interval == 0;
                 }
-                else if (value >= min && value <= end && (value + max - min + 1 - start) % interval == 0) {
-                    return true;
+                else if (value >= min && value <= end) {
+                    next = true;
+                    return (value + max - min + 1 - start) % interval == 0;
                 }
                 else {
                     return false;
@@ -66,7 +68,7 @@ namespace Light.Cron
 
     abstract class CrontabDynamicEndValueNode
     {
-        public abstract bool Check(int dynamicMax, int value);
+        public abstract bool Check(int dynamicMax, int value, out bool next);
     }
 
     class SingleCrontabDynamicValueNode : CrontabDynamicEndValueNode
@@ -78,8 +80,9 @@ namespace Light.Cron
             this.value = value;
         }
 
-        public override bool Check(int dynamicMax, int value)
+        public override bool Check(int dynamicMax, int value, out bool next)
         {
+            next = false;
             var newvalue = dynamicMax + this.value;
             return newvalue == value;
         }
@@ -102,8 +105,9 @@ namespace Light.Cron
             this.interval = interval;
         }
 
-        public override bool Check(int dynamicMax, int value)
+        public override bool Check(int dynamicMax, int value, out bool next)
         {
+            next = false;
             var minN = this.min;
             var maxN = dynamicMax;
             var startN = start > 0 ? start : dynamicMax + start;
@@ -116,11 +120,12 @@ namespace Light.Cron
                 return value >= startN && value <= endN && (value - startN) % interval == 0;
             }
             else if (startN > endN) {
-                if (value >= startN && value <= maxN && (value - startN) % interval == 0) {
-                    return true;
+                if (value >= startN && value <= maxN) {
+                    return (value - startN) % interval == 0;
                 }
-                else if (value >= minN && value <= endN && (value + maxN - minN + 1 - startN) % interval == 0) {
-                    return true;
+                else if (value >= minN && value <= endN) {
+                    next = true;
+                    return (value + maxN - minN + 1 - startN) % interval == 0;
                 }
                 else {
                     return false;
